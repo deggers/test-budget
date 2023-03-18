@@ -1,10 +1,16 @@
-module Main exposing (..)
+port module Main exposing (main)
 
 import Browser
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (..)
 
+-- 2. This is needed because our port takes a JavaScript value as its first argument.
+import Json.Encode as E
+import Json.Decode as D
+
+-- 3. A port for saving our model to localStorage.
+port setStorage : E.Value -> Cmd msg
 
 -- MODEL
 
@@ -14,12 +20,32 @@ type alias Model =
     }
 
 
-initialModel : Model
-initialModel =
-    { balance = 0
-    , transaction = 0
-    }
+initialModel : E.Value -> ( Model, Cmd Msg )
+initialModel flags =
+    (
+        case D.decodeValue decoder flags of
+        Ok model -> model
+        Err _ -> { balance = 0, transaction = 0 }
+    ,
+        Cmd.none
+    )
 
+-- JSON ENCODE/DECODE
+
+
+encode : Model -> E.Value
+encode model =
+  E.object
+    [ ("balance", E.float model.balance)
+    , ("transaction", E.float model.transaction)
+    ]
+
+
+decoder : D.Decoder Model
+decoder =
+  D.map2 Model
+    (D.field "balance" D.float)
+    (D.field "transaction" D.float)
 
 -- UPDATE
 
@@ -28,14 +54,30 @@ type Msg
     | UpdateTransaction String
 
 
-update : Msg -> Model -> Model
+update :Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         AddTransaction ->
-            { model | balance = model.balance + model.transaction, transaction = 0 }
+           ( { model | balance = model.balance + model.transaction, transaction = 0 }
+           , Cmd.none
+           )
 
         UpdateTransaction value ->
-            { model | transaction = Maybe.withDefault 0 (String.toFloat value) }
+           ( { model | transaction = Maybe.withDefault 0 (String.toFloat value) }
+           , Cmd.none
+           )
+
+
+--
+updateAndSave : Msg -> Model -> ( Model, Cmd Msg )
+updateAndSave msg oldModel =
+  let
+    ( newModel, cmds ) = update msg oldModel
+  in
+  ( newModel
+  , Cmd.batch [ setStorage (encode newModel), cmds ]
+  )
+
 
 
 -- VIEW
@@ -54,10 +96,11 @@ view model =
 
 -- PROGRAM
 
-main : Program () Model Msg
+main : Program E.Value Model Msg
 main =
-    Browser.sandbox
+    Browser.element
         { init = initialModel
         , view = view
-        , update = update
+        , update = updateAndSave
+        , subscriptions = \_ -> Sub.none
         }
