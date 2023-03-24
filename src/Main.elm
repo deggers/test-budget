@@ -17,6 +17,7 @@ port setStorage : E.Value -> Cmd msg
 type alias Model =
     { balance : Float
     , transaction : Float
+    , description : String
     }
 
 
@@ -25,7 +26,7 @@ initialModel flags =
     (
         case D.decodeValue decoder flags of
         Ok model -> model
-        Err _ -> { balance = 0, transaction = 0 }
+        Err _ -> { balance = 0, transaction = 0, description = "" }
     ,
         Cmd.none
     )
@@ -38,20 +39,23 @@ encode model =
   E.object
     [ ("balance", E.float model.balance)
     , ("transaction", E.float model.transaction)
+    , ("description", E.string model.description)
     ]
 
 
 decoder : D.Decoder Model
 decoder =
-  D.map2 Model
+  D.map3 Model
     (D.field "balance" D.float)
     (D.field "transaction" D.float)
+    (D.field "description" D.string)
 
 -- UPDATE
 
 type Msg
     = AddTransaction
     | UpdateTransaction String
+    | UpdateDescription String
 
 
 update :Msg -> Model -> ( Model, Cmd Msg )
@@ -64,6 +68,11 @@ update msg model =
 
         UpdateTransaction value ->
            ( { model | transaction = Maybe.withDefault 0 (String.toFloat value) }
+           , Cmd.none
+           )
+
+        UpdateDescription value ->
+           ( { model | description = value }
            , Cmd.none
            )
 
@@ -89,7 +98,8 @@ view model =
         , p [] [ text "Current Balance:" ]
         , p [] [ text (String.fromFloat model.balance) ]
         , p [] [ text "Transaction Amount:" ]
-        , input [ type_ "number",value (String.fromFloat model.transaction), onInput UpdateTransaction ] []
+        , input [ placeholder "How much", type_ "number",value (String.fromFloat model.transaction), onInput UpdateTransaction ] []
+        , input [ placeholder "On what", value model.description, onInput UpdateDescription ] []
         , button [ onClick AddTransaction ] [ text "Add Transaction" ]
         ]
 
